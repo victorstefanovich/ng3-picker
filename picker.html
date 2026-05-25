@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pick a Google Sheet</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f9fafb;
+      color: #333;
+    }
+    .msg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      max-width: 80%;
+      text-align: center;
+    }
+    .msg.loading { color: #888; }
+    .msg.error { color: #b91c1c; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="msg loading">Loading Picker…</div>
+  <div id="error" class="msg error" style="display:none"></div>
+
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    const apiKey = params.get('apiKey');
+    const appId = params.get('appId');
+
+    console.log('[picker] init', { hasToken: !!token, hasApiKey: !!apiKey, appId });
+
+    function showStatus(msg) {
+      const el = document.getElementById('loading');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('error').style.display = 'none';
+    }
+
+    function showError(msg) {
+      console.error('[picker]', msg);
+      document.getElementById('loading').style.display = 'none';
+      const e = document.getElementById('error');
+      e.textContent = msg;
+      e.style.display = 'block';
+    }
+
+    if (!token || !apiKey || !appId) {
+      showError('Missing token, apiKey or appId in URL. This page must be opened by the NG3 extension.');
+    } else if (typeof gapi === 'undefined') {
+      showError('Failed to load Google API script (apis.google.com).');
+    } else {
+      showStatus('Loading Picker module…');
+      gapi.load('picker', {
+        callback: onPickerApiLoad,
+        onerror: (e) => showError('Failed to load Picker module: ' + JSON.stringify(e)),
+        timeout: 10000,
+        ontimeout: () => showError('Picker module load timed out.'),
+      });
+    }
+
+    function onPickerApiLoad() {
+      console.log('[picker] gapi.picker loaded');
+      try {
+        const view = new google.picker.View(google.picker.ViewId.SPREADSHEETS);
+        view.setMimeTypes('application/vnd.google-apps.spreadsheet');
+
+        const picker = new google.picker.PickerBuilder()
+          .setOAuthToken(token)
+          .setDeveloperKey(apiKey)
+          .setAppId(appId)
+          .addView(view)
+          .setCallback(pickerCallback)
+          .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+          .build();
+        console.log('[picker] built, calling setVisible');
+        picker.setVisible(true);
+        document.getElementById('loading').style.display = 'none';
+      } catch (e) {
+        showError('Picker init failed: ' + (e && e.message ? e.message : String(e)));
+      }
+    }
+
+    function pickerCallback(data) {
+      console.log('[picker] callback', data);
+      const action = data && data[google.picker.Response.ACTION];
+      if (action === google.picker.Action.PICKED || action === google.picker.Action.CANCEL) {
+        window.close();
+      }
+    }
+  </script>
+</body>
+</html>
